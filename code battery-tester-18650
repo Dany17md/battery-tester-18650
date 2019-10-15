@@ -1,0 +1,550 @@
+#include <Wire.h>  // Comes with Arduino IDE
+#include <LiquidCrystal_I2C.h>
+// set the LCD address to 0x27 for a 20 chars 4 line display
+// you may need to run an I2C address program to find the address for your LCD
+// Set the pins on the I2C chip used for LCD connections:
+//                    addr, en,rw,rs,d4,d5,d6,d7,bl,blpol
+//LiquidCrystal_I2C lcd(0x27, 4, 5, 6, 0, 1, 2, 3, 7, NEGATIVE);  // Set the LCD I2C address
+//LiquidCrystal_I2C lcd(0x27, 4, 5, 6, 0, 1, 2, 3, 7, POSITIVE);  // Set the LCD I2C address
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); // Addr, En, Rw, Rs, d4, d5, d6, d7, backlighpin, polarity
+
+
+#include <TimerOne.h>
+
+//Setup port pins
+  
+  int FetGate0 = 2;
+  int FetGate1 = 3;
+  int FetGate2 = 4;
+  int FetGate3 = 5;
+  
+  int FetGate4 = 6;
+  int FetGate5 = 7;
+
+
+  int Switch0 = 11;
+  int Switchre = 8;
+  // switch for menu up (connect to ground to function)
+       // switch for menu down (connect to ground to function)
+//-------------------------
+  float Voltage0 = 0;       //Memory location to store current battery voltage
+  float Voltage1 = 0;
+  float Voltage2 = 0;
+  float Voltage3 = 0;
+
+  float Voltage4 = 0;
+  float Voltage5 = 0;
+
+//-------------------------
+  float FirstVoltage0 = 0;      //Memory location to store the first recorded voltage of the cell when first plugged in.
+  float FirstVoltage1 = 0;
+  float FirstVoltage2 = 0;
+  float FirstVoltage3 = 0;
+
+  float FirstVoltage4 = 0;
+  float FirstVoltage5 = 0;
+
+  byte enableFirstRead0 = 0;   // Memory location for recording if we have taken first voltage recording, saved in bits
+  byte enableFirstRead1 = 0;
+//-------------------------
+
+  float Current0 = 0;
+  float Current1 = 0;
+  float Current2 = 0;
+  float Current3 = 0;
+
+  float Current4 = 0;
+  float Current5 = 0;
+
+//-------------------------
+  float Capacity0 = 0;
+  float Capacity1 = 0;
+  float Capacity2 = 0;
+  float Capacity3 = 0;
+
+  float Capacity4 = 0;
+  float Capacity5 = 0;
+
+//-------------------------
+#define resistor23 10.1
+#define resistor5 11.3
+#define resistor 10.5    // sets the ohms of the load resistor
+#define cutOff 2.75     // sets the cut off point to prevent over discharge
+//-------------------------
+  int Batt0 = 0;      //A0
+  int Batt1 = 1;      //A1
+  int Batt2 = 2;      //A2
+  int Batt3 = 3;      //A3
+
+  int Batt4 = 6;      //A4
+  int Batt5 = 7;      //A5
+
+//-------------------------
+  float Vin = 4.99;       //input voltage to arduino board, measure with multi meter and change the value here - important to get good results
+  float adcBits = 1024;   //number of bits in ADC, arduinos are 10 bit
+  float vFactor = 0;          // memory for voltage calculation 
+//-------------------------  
+  float Time0=0;
+  float Time1=0;
+  float Time2=0;
+  float Time3=0;
+
+  float Time4=0;
+  float Time5=0;
+
+//-------------------------
+  
+  int SerialCount = 9;
+  int SerialCheck = 10;
+
+  byte lcdSwitch = 0;
+  byte re=0;
+//===========================================  
+void setup() {
+  // put your setup code here, to run once:
+//Setup serial comms
+Serial.begin (115200);
+//------------------------------------------------------------------------------------------------------
+//Send message out via LCD and Serial port about what we are
+   vFactor = Vin/adcBits;   //work out the voltage fact
+
+lcd.begin(20,4);         // initialize the lcd for 20 chars 4 lines
+
+// NOTE: Cursor Position: CHAR, LINE) start at 0  
+  lcd.setCursor(3,0); //Start at character 4 on line 0
+  lcd.print("18650 Capacity");
+  delay(500);
+  lcd.setCursor(7,1);
+  lcd.print("Tester");
+  delay(500);  
+  lcd.clear();
+
+  lcd.setCursor(0,0);
+  lcd.print ("StartUp......");
+  lcd.setCursor(0,1);
+  lcd.print ("V Factor = ");
+  lcd.print (vFactor, 4);
+  lcd.setCursor(0,2);
+  lcd.print ("Load Value = ");
+  lcd.print (resistor);
+  lcd.print (" Ohm");
+  lcd.setCursor(0,7);
+
+  lcd.print ("Program start...... ");
+  delay(4000);
+  lcd.clear();
+  
+// Wait and then clear the screen ready for testing
+//------------------------------------------------------------------------------------------------------
+//Setup I/O ports
+
+  pinMode(FetGate0, OUTPUT);
+  pinMode(FetGate1, OUTPUT);
+  pinMode(FetGate2, OUTPUT);
+  pinMode(FetGate3, OUTPUT);
+
+  pinMode(FetGate4, OUTPUT);
+  pinMode(FetGate5, OUTPUT);
+
+
+//Ensure all FETs are off
+  digitalWrite (FetGate0, LOW);
+  digitalWrite (FetGate1, LOW);
+  digitalWrite (FetGate2, LOW);
+  digitalWrite (FetGate3, LOW);
+
+  digitalWrite (FetGate4, LOW);
+  digitalWrite (FetGate5, LOW);
+
+//------------------------------------------------------------------------------------------------------
+
+  pinMode(Switch0, INPUT_PULLUP);
+  pinMode(Switchre, INPUT_PULLUP);
+//------------------------------------------------------------------------------------------------------
+//Setup timer
+Timer1.initialize(1000000);
+Timer1.attachInterrupt(checkBatt);
+
+}
+//=========================================== 
+void loop() {
+  // put your main code here, to run repeatedly:
+
+    if (digitalRead (Switch0) == LOW){
+      delay (20);
+        // {
+        lcdSwitch++;    //increment counter
+          if (lcdSwitch == 6){
+            lcdSwitch = 0;    //zero counter if we have got to 15
+            
+          }
+     
+       // }
+    }
+    if (digitalRead (Switchre) == LOW){
+      delay (20);
+      re=1;}
+       else{
+      re=0;
+      }
+do{} // waste time until switch is released.
+            while (digitalRead (Switch0) == LOW);
+
+
+    lcdUpdate();     //endlessly check and update the LCD
+}
+//=========================================== 
+void checkBatt() {
+ 
+ SerialCount++;             //increment seconds counter
+//-------------- Batt 0 ---------------------
+  Voltage0 = analogRead(Batt0);
+  Voltage0 = (Voltage0*vFactor);
+  delay (10);     //allow ADC to settle
+  Voltage0 = analogRead(Batt0);     // read adc for second time to get stable reading
+  Voltage0 = (Voltage0*vFactor);    // calculat voltage
+  if (Voltage0 > cutOff){
+          if (bitRead (enableFirstRead0,0) == 0){
+
+            FirstVoltage0 = Voltage0;         // save voltage
+            bitSet (enableFirstRead0,0);      // set the bit so we do not take another voltage reading (so we know the original battery voltage)
+          }
+    
+    digitalWrite (FetGate0, HIGH);
+    Current0 = Voltage0/resistor;
+    Capacity0 = Capacity0+Current0/3600;          //3600 seconds in an hour
+    Time0++;             //increment seconds counter
+  
+  }
+  if (Voltage0 < cutOff){  
+    digitalWrite (FetGate0, LOW);
+    if(re==1){
+      if(lcdSwitch==0){
+        Capacity0=0;
+      }
+    }
+  
+  }
+  //Print Results to Serial
+  if (SerialCount > SerialCheck ){        //prints every 10 seconds
+  Serial.print ("Battery 0 Voltage  = ");
+  Serial.print (Voltage0, 4);
+  Serial.print (", Current = ");
+  Serial.print (Current0, 4);
+  Serial.print (", Capacity = ");
+  Serial.print (Capacity0, 4);
+  Serial.print ("Ah");
+  Serial.print (", Seconds Passed = ");
+  Serial.println (Time0);
+  }
+    
+//-------------- Batt 1 ---------------------
+  Voltage1 = analogRead(Batt1);
+  Voltage1 = (Voltage1*vFactor);
+    delay (10);     //allow ADC to settle
+  Voltage1 = analogRead(Batt1);     // read adc for second time to get stable reading
+  Voltage1 = (Voltage1*vFactor);    // calculate  voltage
+  if (Voltage1 > cutOff){
+    if (bitRead (enableFirstRead0,1) == 0){
+            FirstVoltage1 = Voltage1;
+            bitSet (enableFirstRead0,1);      // set the bit so we do not take another voltage reading (so we know the original battery voltage)
+          }
+    digitalWrite (FetGate1, HIGH);
+    Current1 = Voltage1/resistor;
+    Capacity1 = Capacity1+Current1/3600;
+    Time1++;             //increment seconds counter
+  }
+  if (Voltage1 < cutOff){  
+    digitalWrite (FetGate1, LOW);
+    if(re==1){
+      if(lcdSwitch==1){
+        Capacity1=0;
+      }
+    }
+  }
+  //Print Results
+  if (SerialCount > SerialCheck ){        //prints every 10 seconds
+  Serial.print ("Battery 1 Voltage  = ");
+  Serial.print (Voltage1, 4);
+  Serial.print (", Current = ");
+  Serial.print (Current1, 4);
+  Serial.print (", Capacity = ");
+  Serial.print (Capacity1, 4);
+  Serial.print ("Ah");
+  Serial.print (", Seconds Passed = ");
+  Serial.println (Time1);
+  }
+//-------------- Batt 2 ---------------------
+  Voltage2 = analogRead(Batt2);
+  Voltage2 = (Voltage2*vFactor);
+    delay (10);     //allow ADC to settle
+  Voltage2 = analogRead(Batt2);     // read adc for second time to get stable reading
+  Voltage2 = (Voltage2*vFactor);    // calculate  voltage
+  if (Voltage2 > cutOff){
+    if (bitRead (enableFirstRead0,2) == 0){
+            FirstVoltage2 = Voltage2;
+            bitSet (enableFirstRead0,2);      // set the bit so we do not take another voltage reading (so we know the original battery voltage)
+          }
+    digitalWrite (FetGate2, HIGH);
+    Current2 = Voltage2/resistor23;
+    Capacity2 = Capacity2+Current2/3600;
+                //increment seconds counter
+  }
+  if (Voltage2 < cutOff){  
+    digitalWrite (FetGate2, LOW);
+    if(re==1){
+      if(lcdSwitch==2){
+        Capacity2=0;
+      }
+    }
+  }
+  //Print Results
+  if (SerialCount > SerialCheck ){        //prints every 10 seconds
+  Serial.print ("Battery 2 Voltage  = ");
+  Serial.print (Voltage2, 4);
+  Serial.print (", Current = ");
+  Serial.print (Current2, 4);
+  Serial.print (", Capacity = ");
+  Serial.print (Capacity2, 4);
+  Serial.print ("Ah");
+  Serial.print (", Seconds Passed = ");
+  Serial.println (Time2);
+  }
+//-------------- Batt 3 ---------------------
+  Voltage3 = analogRead(Batt3);
+  Voltage3 = (Voltage3*vFactor);
+    delay (10);     //allow ADC to settle
+  Voltage3 = analogRead(Batt3);     // read adc for second time to get stable reading
+  Voltage3 = (Voltage3*vFactor);    // calculate  voltage
+  if (Voltage3 > cutOff){
+    if (bitRead (enableFirstRead0,3) == 0){
+            FirstVoltage3 = Voltage3;
+            bitSet (enableFirstRead0,3);      // set the bit so we do not take another voltage reading (so we know the original battery voltage)
+          }
+    digitalWrite (FetGate3, HIGH);
+    Current3 = Voltage3/resistor23;
+    Capacity3 = Capacity3+Current3/3600;
+    Time3++;             //increment seconds counter
+  }
+  if (Voltage3 < cutOff){  
+    digitalWrite (FetGate3, LOW);
+    if(re==1){
+      if(lcdSwitch==3){
+        Capacity3=0;
+      }
+    }
+  }
+  //Print Results
+  if (SerialCount > SerialCheck ){        //prints every 10 seconds
+  Serial.print ("Battery 3 Voltage  = ");
+  Serial.print (Voltage3, 4);
+  Serial.print (", Current = ");
+  Serial.print (Current3, 4);
+  Serial.print (", Capacity = ");
+  Serial.print (Capacity3, 4);
+  Serial.print ("Ah");
+  Serial.print (", Seconds Passed = ");
+  Serial.println (Time3);
+  
+  }
+//-------------- Batt 4 ---------------------
+  Voltage4 = analogRead(Batt4);
+  Voltage4 = (Voltage4*vFactor);
+    delay (10);     //allow ADC to settle
+  Voltage4 = analogRead(Batt4);     // read adc for second time to get stable reading
+  Voltage4 = (Voltage4*vFactor);    // calculate  voltage
+  if (Voltage4 > cutOff){
+    if (bitRead (enableFirstRead0,4) == 0){
+            FirstVoltage4 = Voltage4;
+            bitSet (enableFirstRead0,4);      // set the bit so we do not take another voltage reading (so we know the original battery voltage)
+          }
+    digitalWrite (FetGate4, HIGH);
+    Current4 = Voltage4/resistor;
+    Capacity4 = Capacity4+Current4/3600;
+    Time4++;             //increment seconds counter
+  }
+  if (Voltage4 < cutOff){  
+    digitalWrite (FetGate4, LOW);
+    if(re==1){
+      if(lcdSwitch==4){
+        Capacity4=0;
+      }
+    }
+  }
+  //Print Results
+  if (SerialCount > SerialCheck ){        //prints every 10 seconds
+  Serial.print ("Battery 4 Voltage  = ");
+  Serial.print (Voltage4, 4);
+  Serial.print (", Current = ");
+  Serial.print (Current4, 4);
+  Serial.print (", Capacity = ");
+  Serial.print (Capacity4, 4);
+  Serial.print ("Ah");
+  Serial.print (", Seconds Passed = ");
+  Serial.println (Time4);
+ 
+  }
+//-------------- Batt 5 ---------------------
+  Voltage5 = analogRead(Batt5);
+  Voltage5 = (Voltage5*vFactor);
+    delay (10);     //allow ADC to settle
+  Voltage5 = analogRead(Batt5);     // read adc for second time to get stable reading
+  Voltage5 = (Voltage5*vFactor);    // calculate  voltage
+  if (Voltage5 > cutOff){
+    if (bitRead (enableFirstRead0,5) == 0){
+            FirstVoltage5 = Voltage5;
+            bitSet (enableFirstRead0,5);      // set the bit so we do not take another voltage reading (so we know the original battery voltage)
+          }
+    digitalWrite (FetGate5, HIGH);
+    Current5 = Voltage5/resistor5;
+    Capacity5 = Capacity5+Current5/3600;
+    Time5++;             //increment seconds counter
+  }
+  if (Voltage5 < cutOff){  
+    digitalWrite (FetGate5, LOW);
+    if(re==1){
+      if(lcdSwitch==5){
+        Capacity5=0;
+      }
+    }
+  }
+  //Print Results
+  if (SerialCount > SerialCheck ){        //prints every 10 seconds
+  Serial.print ("Battery 5 Voltage  = ");
+  Serial.print (Voltage5, 4);
+  Serial.print (", Current = ");
+  Serial.print (Current5, 4);
+  Serial.print (", Capacity = ");
+  Serial.print (Capacity5, 4);
+  Serial.print ("Ah");
+  Serial.print (", Seconds Passed = ");
+  Serial.println (Time5);
+  
+  }
+
+}
+//====================================================================================================
+void lcdUpdate(){
+//----------------------------------------------
+//Display stats for Battery 0 to LCD
+  if (lcdSwitch == 0){
+//  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print ("B0   A = ");
+  lcd.print (Current0, 4);
+  lcd.setCursor(0,1);
+  lcd.print ("Original V = ");
+  lcd.print (FirstVoltage0, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,2);
+  lcd.print ("Live V = ");
+  lcd.print (Voltage0, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,7);
+  lcd.print ("Capacity = ");
+  lcd.print (Capacity0, 4);
+  lcd.print ("Ah");
+  }
+//----------------------------------------------
+//Display stats for Battery 1 to LCD
+  if (lcdSwitch == 1){
+//  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print ("B1   A = ");
+  lcd.print (Current1, 4);
+  lcd.setCursor(0,1);
+  lcd.print ("Original V = ");
+  lcd.print (FirstVoltage1, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,2);
+  lcd.print ("Live V = ");
+  lcd.print (Voltage1, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,7);
+  lcd.print ("Capacity = ");
+  lcd.print (Capacity1, 4);
+  lcd.print ("Ah");
+  }
+//----------------------------------------------
+//Display stats for Battery 2 to LCD
+  if (lcdSwitch == 2){
+//  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print ("B2   A = ");
+  lcd.print (Current2, 4);  
+  lcd.setCursor(0,1);
+  lcd.print ("Original V = ");
+  lcd.print (FirstVoltage2, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,2);
+  lcd.print ("Live V = ");
+  lcd.print (Voltage2, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,7);
+  lcd.print ("Capacity = ");
+  lcd.print (Capacity2, 4);
+  lcd.print ("Ah");
+  }
+//----------------------------------------------
+//Display stats for Battery 3 to LCD
+  if (lcdSwitch == 3){
+//  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print ("B3   A = ");
+  lcd.print (Current3, 4);
+  lcd.setCursor(0,1);
+  lcd.print ("Original V = ");
+  lcd.print (FirstVoltage3, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,2);
+  lcd.print ("Live V = ");
+  lcd.print (Voltage3, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,7);
+  lcd.print ("Capacity = ");
+  lcd.print (Capacity3, 4);
+  lcd.print ("Ah");
+  }
+//----------------------------------------------
+//Display stats for Battery 4 to LCD
+  if (lcdSwitch == 4){
+//  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print ("B4   A = ");
+  lcd.print (Current4, 4);
+  lcd.setCursor(0,1);
+  lcd.print ("Original V = ");
+  lcd.print (FirstVoltage4, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,2);
+  lcd.print ("Live V = ");
+  lcd.print (Voltage4, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,7);
+  lcd.print ("Capacity = ");
+  lcd.print (Capacity4, 4);
+  lcd.print ("Ah");
+  }
+//----------------------------------------------
+//Display stats for Battery 5 to LCD
+  if (lcdSwitch == 5){
+//  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print ("B5   A = ");
+  lcd.print (Current5, 4);
+  lcd.setCursor(0,1);
+  lcd.print ("Original V = ");
+  lcd.print (FirstVoltage5, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,2);
+  lcd.print ("Live V = ");
+  lcd.print (Voltage5, 4);
+  lcd.print ("V");
+  lcd.setCursor(0,7);
+  lcd.print ("Capacity = ");
+  lcd.print (Capacity5, 4);
+  lcd.print ("Ah");
+  }
+//----------------------------------------------
+
+}
